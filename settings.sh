@@ -43,16 +43,16 @@ PACKAGES=(
 	# gaming
 	lutris python-protobuf steam steam-native-runtime steamtinkerlaunch
 	minigalaxy gamehub legendary prismlauncher bottles playonlinux obs-studio
-	retroarch retroarch-assets-ozone libretro-beetle-psx-hw sunshine
-	libretro-blastem libretro-bsnes libretro-dolphin duckstation
+	retroarch retroarch-assets-ozone libretro-beetle-psx-hw
+	libretro-blastem libretro-bsnes libretro-dolphin duckstation-gpl
 	libretro-gambatte libretro-melonds libretro-mgba libretro-nestopia
 	libretro-parallel-n64 libretro-picodrive libretro-ppsspp
-	libretro-retrodream libretro-yabause pcsx2-avx-git
+	libretro-yabause pcsx2-git
 	# extra
 	nano ttf-dejavu ttf-liberation firefox mpv geany pcmanfm
 	htop qbittorrent speedcrunch gpicview file-roller openbox lxterminal
-	yt-dlp minizip nautilus genymotion jre17-openjdk gnome-themes-extra ffmpegthumbnailer
-	librecad
+	yt-dlp minizip nautilus genymotion jre17-openjdk gnome-themes-extra
+ 	ffmpegthumbnailer tmux
 )
 
 # If you want to install AUR packages, specify them in this variable
