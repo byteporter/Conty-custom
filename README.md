@@ -20,17 +20,18 @@ This is an easy to use compressed unprivileged Linux container packed into a sin
 * Supports Chaotic-AUR and ALHP repositories. AUR is also supported.
 
 In its default release, it includes, among others, these apps:
-[Wine-Proton](https://en.wikipedia.org/wiki/Proton_(software)),
+[Wine-Proton-GE](https://github.com/GloriousEggroll/proton-ge-custom),
 [Steam](https://en.wikipedia.org/wiki/Steam_(service)),
 [Lutris](https://en.wikipedia.org/wiki/Lutris),
 [PlayOnLinux](https://en.wikipedia.org/wiki/PlayOnLinux),
-[GameHub](https://github.com/tkashkin/GameHub),
 [Minigalaxy](https://sharkwouter.github.io/minigalaxy),
-[Legendary](https://github.com/derrod/legendary),
 [Bottles](https://usebottles.com),
 [Faugus Launcher](https://github.com/Faugus/faugus-launcher),
+[UMU Launcher](https://github.com/Open-Wine-Components/umu-launcher),
+[ProtonPlus](https://github.com/Vysp3r/ProtonPlus),
 [PrismLauncher](https://prismlauncher.org),
 [MangoHud](https://github.com/flightlessmango/MangoHud),
+[LSFG-VK](https://github.com/PancakeTAS/lsfg-vk),
 [Gamescope](https://github.com/ValveSoftware/gamescope),
 [RetroArch](https://www.retroarch.com),
 [DuckStation](https://www.duckstation.org/),
@@ -64,6 +65,7 @@ If these applications are not enough, you can install additional applications or
   * [Useful Tips](#useful-tips)
     + [Sandbox](#sandbox)
     + [About Wine](#about-wine)
+    + [LSFG-VK](#LSFG-VK)
   * [Known issues](#known-issues)
   * [Main used projects](#main-used-projects)
 
@@ -83,13 +85,11 @@ $ chmod +x conty.sh
 
 Chmod only need to be executed once (per file). You can now [start using Conty](#usage).
 
-Or you can install from [gentoo-zh overlay](https://github.com/microcai/gentoo-zh/tree/master/games-emulation/conty).
-
 ###  Requirements
 
 The only requirements are `fuse3` (or `fuse2`) and `coreutils` (or other POSIX compliant basic utilities). And your `/tmp` directory should allow files execution (which it does by default on most distros).
 
-Your Linux kernel must be at least version 4.4 and should support unprivileged user namespaces. On some Linux distros this feature is disabled by default and can be enabled with sysfs:
+Your Linux kernel must be at least version 4.4 (though 6.0 or newer is highly recommended due to the last point of [known issues](https://github.com/Kron4ek/Conty#known-issues)) and should support unprivileged user namespaces. On some Linux distros this feature is disabled by default and can be enabled with sysfs:
 
 ```
 # sysctl kernel.unprivileged_userns_clone=1
@@ -391,7 +391,7 @@ If `$XDG_DATA_HOME/applications/Conty` already exists, `conty.sh -d` will instea
 
 There are a few ways to update Conty and get the latest packages, use whichever works best for you.
 
-* First of all, you can simply download latest release from the [releases page](https://github.com/Kron4ek/Conty/releases), i usually upload a new release about every month.
+* First of all, you can simply download latest release from the [releases page](https://github.com/Kron4ek/Conty/releases), i usually upload a new release about every two months.
 * You can manually create a Conty executable with latest packages inside, read the [How to create your own Conty executables](#how-to-create-your-own-conty-executables) section below.
 * You can clone the repository and [use GitHub Actions](#automated-github-actions) to get new Conty file according your specifications, every week (see Automated section below).
 
@@ -515,6 +515,10 @@ If you have new enough Linux kernel (5.16 or newer), it's a good idea to enable 
 $ WINEFSYNC=1 ./conty.sh wine someapplication.exe
 ```
 
+### LSFG-VK
+
+Lsfg-vk is included in Conty, but is disabled by default. You can enable it by using `ENABLE_LSFG=1` environment variable, you also need Lossless.dll for it to work.
+
 ## Known issues
 
 * Some Windows applications running under Wine complain about lack of free disk space. This is because under Conty root partition is seen as full and read-only, so some applications think that there is no free space, even though you might have plenty of space in your HOME. The solution is simple, just run `winecfg`,  move to "Drives" tab and add your `/home` as an additional drive (for example, `D:`), and then install applications to that drive. More info [here](https://github.com/Kron4ek/Conty/issues/67#issuecomment-1460257910).
@@ -533,6 +537,7 @@ $ WINEFSYNC=1 ./conty.sh wine someapplication.exe
     Solution from https://www.reddit.com/r/linux_gaming/comments/1ds1ei3/steam_input_not_working_under_gamescope/lb10mmf/
 
 * The game is not starting or starting only when you disable your additional displays (for example Armies of Exigo): use Gamescope - see previous point.
+* Some features in new versions of Mesa (25.3 and newer) require at least Linux kernel 6.0. If you're using Conty on a system with an older Linux kernel and encountering problems (such as games crashing or not launching at all), upgrade your Linux kernel to 6.0 or newer, or use Conty 1.28.3, which includes an old enough Mesa version. [Related bug report](https://gitlab.freedesktop.org/mesa/mesa/-/work_items/15219).
 
 ## Main used projects
 

@@ -2,6 +2,8 @@
 
 # Dependencies: sed, squashfs-tools or dwarfs
 
+export LC_ALL=C
+
 script_dir="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 image_path="${script_dir}"/image
 bootstrap="${script_dir}"/root.x86_64
@@ -26,6 +28,16 @@ if ! command -v sed 1>/dev/null; then
 	exit 1
 fi
 
+unset proxy
+if [ -n "${DOWNLOAD_PROXY}" ]; then
+	proxy=(-x "${DOWNLOAD_PROXY}")
+
+	export http_proxy="${DOWNLOAD_PROXY}"
+	export https_proxy="${DOWNLOAD_PROXY}"
+	export HTTP_PROXY="${DOWNLOAD_PROXY}"
+	export HTTPS_PROXY="${DOWNLOAD_PROXY}"
+fi
+
 cd "${script_dir}" || exit 1
 
 if [ -n "$USE_DWARFS" ]; then
@@ -44,11 +56,11 @@ if [ ! -f "${utils}" ] || [ "$(wc -c < "${utils}")" -lt 100000 ]; then
    	fi
 
 	rm -f "${utils}"
-	curl -#LO "${utils_url}"
+	curl ${proxy[@]} -#LO "${utils_url}"
 
 	if [ ! -f "${utils}" ] || [ "$(wc -c < "${utils}")" -lt 100000 ]; then
 		rm -f "${utils}"
-		curl -#LO "https://gitlab.com/-/project/61149207/uploads/1ff27b6750e246ebd181260695bc95f3/utils.tar"
+		curl ${proxy[@]} -#LO "https://gitlab.com/-/project/61149207/uploads/dae13c9b40f73056fefba390e31637fd/utils.tar"
   		tar -xf utils.tar
 	fi
 fi
@@ -59,7 +71,7 @@ if [ ! -f conty-start.sh ]; then
 fi
 
 rm -rf utils
-tar -zxf "${utils}"
+gzip -dc "${utils}" | tar -xf -
 
 if [ $? != 0 ]; then
 	echo "Something is wrong with ${utils}"
@@ -95,21 +107,21 @@ if [ ! -f "${image_path}" ] || [ -z "${USE_EXISTING_IMAGE}" ]; then
 fi
 
 if command -v sed 1>/dev/null; then
-	utils_size="$(stat -c%s "${utils}")"
+	utils_size="$(stat "${utils}" | grep Size | awk -F ' ' '{print $2}')"
 	init_size=0
 	bash_size=0
 	busybox_size=0
 
 	if [ -s utils/init ]; then
-		init_size="$(stat -c%s utils/init)"
+		init_size="$(stat utils/init | grep Size | awk -F ' ' '{print $2}')"
 	fi
 
 	if [ -s utils/bash ]; then
-		bash_size="$(stat -c%s utils/bash)"
+		bash_size="$(stat utils/bash | grep Size | awk -F ' ' '{print $2}')"
 	fi
 
 	if [ -s utils/busybox ]; then
-		busybox_size="$(stat -c%s utils/busybox)"
+		busybox_size="$(stat utils/busybox | grep Size | awk -F ' ' '{print $2}')"
 	fi
 
 	if [ "${init_size}" = 0 ] || [ "${bash_size}" = 0 ]; then
@@ -118,13 +130,20 @@ if command -v sed 1>/dev/null; then
 		rm -f utils/init utils/bash
 	fi
 
-	sed -i "s/init_size=.*/init_size=${init_size}/" conty-start.sh
-	sed -i "s/bash_size=.*/bash_size=${bash_size}/" conty-start.sh
-	sed -i "s/busybox_size=.*/busybox_size=${busybox_size}/" conty-start.sh
-	sed -i "s/utils_size=.*/utils_size=${utils_size}/" conty-start.sh
+	sed "s/init_size=.*/init_size=${init_size}/" conty-start.sh > _
+	mv -f _ conty-start.sh
+	sed "s/bash_size=.*/bash_size=${bash_size}/" conty-start.sh > _
+	mv -f _ conty-start.sh
+	sed "s/busybox_size=.*/busybox_size=${busybox_size}/" conty-start.sh > _
+	mv -f _ conty-start.sh
+	sed "s/utils_size=.*/utils_size=${utils_size}/" conty-start.sh > _
+	mv -f _ conty-start.sh
 
-	sed -i "s/script_size=.*/script_size=$(stat -c%s conty-start.sh)/" conty-start.sh
-	sed -i "s/script_size=.*/script_size=$(stat -c%s conty-start.sh)/" conty-start.sh
+	sed "s/script_size=.*/script_size=$(stat conty-start.sh | grep Size | awk -F ' ' '{print $2}')/" conty-start.sh > _
+	mv -f _ conty-start.sh
+	sed "s/script_size=.*/script_size=$(stat conty-start.sh | grep Size | awk -F ' ' '{print $2}')/" conty-start.sh > _
+	mv -f _ conty-start.sh
+	chmod +x conty-start.sh
 fi
 
 # Combine the files into a single executable using cat

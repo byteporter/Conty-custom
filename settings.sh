@@ -7,7 +7,8 @@
 PACKAGES=(
 	# audio
 	alsa-lib lib32-alsa-lib alsa-plugins lib32-alsa-plugins libpulse
-	lib32-libpulse alsa-tools alsa-utils pipewire lib32-pipewire pipewire-pulse pipewire-jack lib32-pipewire-jack
+	lib32-libpulse alsa-tools alsa-utils pipewire lib32-pipewire pipewire-pulse
+	pipewire-jack lib32-pipewire-jack sndio lib32-sndio
 	# core
 	xorg-xwayland qt6-wayland wayland lib32-wayland qt5-wayland xorg-server-xephyr gamescope
 	# video
@@ -17,37 +18,36 @@ PACKAGES=(
 	lib32-vulkan-mesa-layers libva-intel-driver lib32-libva-intel-driver
 	intel-media-driver mesa-utils vulkan-tools libva-utils lib32-mesa-utils
 	# wine
-	wine-staging winetricks-git wine-nine wineasio
+	wine-staging winetricks-git wineasio
 	freetype2 lib32-freetype2 libxft lib32-libxft
-	flex lib32-flex fluidsynth lib32-fluidsynth
+	flex fluidsynth
 	libxrandr lib32-libxrandr xorg-xrandr libldap lib32-libldap
-	mpg123 lib32-mpg123 libxcomposite lib32-libxcomposite
+	mpg123 libxcomposite lib32-libxcomposite
 	libxi lib32-libxi libxinerama lib32-libxinerama libxss lib32-libxss
-	libxslt lib32-libxslt openal lib32-openal
+	libxslt openal
 	krb5 lib32-krb5 libpulse lib32-libpulse alsa-plugins
 	lib32-alsa-plugins alsa-lib lib32-alsa-lib gnutls lib32-gnutls
-	giflib lib32-giflib gst-libav gst-plugin-pipewire gst-plugins-ugly
-	gst-plugins-bad gst-plugins-bad-libs
-	gst-plugins-base-libs lib32-gst-plugins-base-libs gst-plugins-base lib32-gst-plugins-base
-	gst-plugins-good lib32-gst-plugins-good gstreamer lib32-gstreamer
-	libpng lib32-libpng v4l-utils lib32-v4l-utils
+	giflib gst-libav gst-plugin-pipewire gst-plugins-ugly
+	gst-plugins-bad gst-plugins-bad-libs gst-plugin-va lsp-plugins-gst
+	gst-plugins-base-libs gst-plugins-base gst-plugins-good gstreamer
+	libpng lib32-libpng v4l-utils
 	libgpg-error lib32-libgpg-error libjpeg-turbo lib32-libjpeg-turbo
 	libgcrypt lib32-libgcrypt ncurses lib32-ncurses ocl-icd lib32-ocl-icd
 	libxcrypt-compat lib32-libxcrypt-compat libva lib32-libva sqlite lib32-sqlite
 	gtk3 lib32-gtk3 vulkan-icd-loader lib32-vulkan-icd-loader
-	sdl2-compat lib32-sdl2-compat vkd3d lib32-vkd3d libgphoto2
-	openssl-1.1 lib32-openssl-1.1 libnm lib32-libnm
+	sdl2-compat vkd3d lib32-vkd3d libgphoto2
+	libnm lib32-libnm
 	cabextract wget gamemode lib32-gamemode mangohud lib32-mangohud
 	# development
 	base-devel git meson mingw-w64-gcc cmake
 	# gaming
-	lutris python-protobuf steam steam-native-runtime steamtinkerlaunch
-	minigalaxy gamehub legendary prismlauncher bottles playonlinux obs-studio
+	lutris python-protobuf steam steamtinkerlaunch
+	minigalaxy prismlauncher bottles playonlinux obs-studio
 	retroarch retroarch-assets-ozone libretro-beetle-psx-hw
 	libretro-blastem libretro-bsnes libretro-dolphin duckstation-gpl
 	libretro-gambatte libretro-melonds libretro-mgba libretro-nestopia
 	libretro-parallel-n64 libretro-picodrive libretro-ppsspp
-	libretro-yabause pcsx2-git
+	libretro-yabause pcsx2-git lsfg-vk-git protonplus umu-launcher
 	# extra
 	nano ttf-dejavu ttf-liberation firefox mpv geany pcmanfm
 	htop qbittorrent speedcrunch gpicview file-roller openbox lxterminal
@@ -106,16 +106,18 @@ LOCALES=(
 # Content of pacman mirrorrlist file before reflector is installed and used to fetch new one
 # shellcheck disable=2016
 MIRRORLIST='
-Server = https://mirror1.sl-chat.ru/archlinux/$repo/os/$arch
-Server = https://mirror3.sl-chat.ru/archlinux/$repo/os/$arch
-Server = https://us.mirrors.cicku.me/archlinux/$repo/os/$arch
+Server = https://fastly.mirror.pkgbuild.com/$repo/os/$arch
+Server = https://de.arch.mirror.kescher.at/$repo/os/$arch
+Server = https://at.arch.niranjan.co/$repo/os/$arch
+Server = https://mirror.moson.org/arch/$repo/os/$arch
+Server = https://arch.jensgutermuth.de/$repo/os/$arch
+Server = https://de.arch.niranjan.co/$repo/os/$arch
+Server = https://umea.mirror.pkgbuild.com/$repo/os/$arch
 Server = https://mirror.osbeck.com/archlinux/$repo/os/$arch
-Server = https://md.mirrors.hacktegic.com/archlinux/$repo/os/$arch
-Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch
-Server = https://mirror.qctronics.com/archlinux/$repo/os/$arch
-Server = https://arch.mirror.constant.com/$repo/os/$arch
-Server = https://america.mirror.pkgbuild.com/$repo/os/$arch
-Server = https://mirror.tmmworkshop.com/archlinux/$repo/os/$arch
+Server = https://ams.nl.mirrors.bjg.at/arch/$repo/os/$arch
+Server = https://mirror.lcarilla.de/archlinux/$repo/os/$arch
+Server = https://mirror.pseudoform.org/$repo/os/$arch
+Server = https://mirror.cyberbits.eu/archlinux/$repo/os/$arch
 '
 
 # Enable this variable to use the system-wide mksquashfs/mkdwarfs instead
@@ -141,20 +143,22 @@ DWARFS_COMPRESSOR_ARGUMENTS=(
 	-W 12 -w 4 --no-history-timestamps --no-create-timestamp
 )
 
+# Specify the proxy server that you want to use to download files and packages
+# This can be specified like protocol://address (for example, socks5://127.0.0.1)
+DOWNLOAD_PROXY=
 
 # List of links to arch bootstrap archive
 # Conty will try to download each one of them sequentially
 BOOTSTRAP_DOWNLOAD_URLS=(
-	'https://arch.hu.fo/archlinux/iso/latest/archlinux-bootstrap-x86_64.tar.zst'
-	'https://mirror.cyberbits.eu/archlinux/iso/latest/archlinux-bootstrap-x86_64.tar.zst'
-	'https://mirror.osbeck.com/archlinux/iso/latest/archlinux-bootstrap-x86_64.tar.zst'
-	'https://mirror.lcarilla.de/archlinux/iso/latest/archlinux-bootstrap-x86_64.tar.zst'
-	'https://mirror.moson.org/archlinux/iso/latest/archlinux-bootstrap-x86_64.tar.zst'
-	'https://mirror.f4st.host/archlinux/iso/latest/archlinux-bootstrap-x86_64.tar.zst'
+	'https://umea.mirror.pkgbuild.com/iso/latest/archlinux-bootstrap-x86_64.tar.zst'
+	'https://de.arch.mirror.kescher.at/iso/latest/archlinux-bootstrap-x86_64.tar.zst'
+	'https://de.arch.niranjan.co/iso/latest/archlinux-bootstrap-x86_64.tar.zst'
+	'https://mirror.moson.org/arch/iso/latest/archlinux-bootstrap-x86_64.tar.zst'
+	'https://fastly.mirror.pkgbuild.com/iso/latest/archlinux-bootstrap-x86_64.tar.zst'
 )
 
 # sha256sums.txt file to verify downloaded bootstrap archive with
-BOOTSTRAP_SHA256SUM_FILE_URL='https://archlinux.org/iso/latest/sha256sums.txt'
+BOOTSTRAP_SHA256SUM_FILE_URL='https://umea.mirror.pkgbuild.com/iso/latest/sha256sums.txt'
 
 # Set to any value to use an existing image if it exists
 # Otherwise the script will always create a new image

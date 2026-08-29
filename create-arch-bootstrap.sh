@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Dependencies: curl tar gzip grep coreutils
+# Dependencies: curl tar gzip grep coreutils zstd sed
 # Root rights are required
 source settings.sh
 
@@ -12,7 +12,7 @@ check_command_available() {
 		fi
 	done
 }
-check_command_available curl gzip grep sha256sum
+check_command_available curl gzip grep sha256sum tar zstd sed
 
 if [ $EUID != 0 ]; then
 	echo "Root rights are required!"
@@ -23,14 +23,12 @@ script_dir="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 bootstrap="${script_dir}"/root.x86_64
 
 mount_chroot () {
-	mount --bind "${bootstrap}" "${bootstrap}"
+	mount -o bind "${bootstrap}" "${bootstrap}"
 	mount -t proc /proc "${bootstrap}"/proc
-	mount --bind /sys "${bootstrap}"/sys
-	mount --make-rslave "${bootstrap}"/sys
-	mount --bind /dev "${bootstrap}"/dev
-	mount --bind /dev/pts "${bootstrap}"/dev/pts
-	mount --bind /dev/shm "${bootstrap}"/dev/shm
-	mount --make-rslave "${bootstrap}"/dev
+	mount -t sysfs sys "${bootstrap}"/sys
+	mount -o bind /dev "${bootstrap}"/dev
+	mount -o bind /dev/pts "${bootstrap}"/dev/pts
+	mount -o bind /dev/shm "${bootstrap}"/dev/shm
 
 	rm -f "${bootstrap}"/etc/resolv.conf
 	cp /etc/resolv.conf "${bootstrap}"/etc/resolv.conf
@@ -41,11 +39,9 @@ mount_chroot () {
 
 unmount_chroot () {
 	umount -l "${bootstrap}"
-	umount "${bootstrap}"/proc
-	umount "${bootstrap}"/sys
-	umount "${bootstrap}"/dev/pts
-	umount "${bootstrap}"/dev/shm
-	umount "${bootstrap}"/dev
+	for fs in proc sys dev/pts dev/shm dev; do
+		umount "${bootstrap}"/"${fs}"
+	done
 }
 
 run_in_chroot () {
@@ -82,8 +78,10 @@ install_aur_packages () {
 
 	echo "Checking if packages are present in the AUR, please wait..."
 	for p in ${aur_pkgs}; do
-		if ! yay -a -G "${p}" &>/dev/null; then
+		if ! paru --clonedir /home/aur -a -G "${p}" &>/dev/null; then
 			bad_aur_pkglist="${bad_aur_pkglist} ${p}"
+		else
+			good_aur_pkglist="${good_aur_pkglist} ${p}"
 		fi
 	done
 
@@ -92,7 +90,7 @@ install_aur_packages () {
 	fi
 
 	for i in {1..10}; do
-		if yes | yay --needed --removemake --builddir /home/aur -a -S ${aur_pkgs}; then
+		if paru --noconfirm --sync --removemake --skipreview --useask --clonedir /home/aur --builddir /home/aur -a ${good_aur_pkglist}; then
 			break
 		fi
 	done
@@ -110,33 +108,48 @@ generate_mirrorlist () {
 	printf '%s\n' "$MIRRORLIST" > mirrorlist
 }
 
+unset proxy
+if [ -n "${DOWNLOAD_PROXY}" ]; then
+	proxy=(-x "${DOWNLOAD_PROXY}")
+
+	export http_proxy="${DOWNLOAD_PROXY}"
+	export https_proxy="${DOWNLOAD_PROXY}"
+	export HTTP_PROXY="${DOWNLOAD_PROXY}"
+	export HTTPS_PROXY="${DOWNLOAD_PROXY}"
+fi
+
 cd "${script_dir}" || exit 1
 
+if [ ! -f sha256sums.txt ] || [ ! -f archlinux-bootstrap-x86_64.tar.zst ]; then
+	curl ${proxy[@]} -#LO "$BOOTSTRAP_SHA256SUM_FILE_URL" || (echo "Failed to download sha256sums.txt file"; exit 1)
 
-curl -#LO "$BOOTSTRAP_SHA256SUM_FILE_URL" || (echo "Failed to download sha256sums.txt file"; exit 1)
-for link in "${BOOTSTRAP_DOWNLOAD_URLS[@]}"; do
-	echo "Downloading Arch Linux bootstrap from $link"
-	curl -#LO "$link"
+	grep archlinux-bootstrap-x86_64.tar.zst sha256sums.txt > _
+	mv -f _ sha256sums.txt
 
-	echo "Verifying the integrity of the bootstrap"
-	if sha256sum --ignore-missing -c sha256sums.txt &>/dev/null; then
-		bootstrap_is_good=1
-		break
+	for link in "${BOOTSTRAP_DOWNLOAD_URLS[@]}"; do
+		echo "Downloading Arch Linux bootstrap from $link"
+		curl ${proxy[@]} -#LO "$link"
+
+		echo "Verifying the integrity of the bootstrap"
+		if sha256sum -c sha256sums.txt &>/dev/null; then
+			bootstrap_is_good=1
+			break
+		fi
+		echo "Download failed, trying again with different mirror"
+	done
+
+	if [ -z "${bootstrap_is_good}" ]; then
+		echo "Bootstrap download failed or its checksum is incorrect"
+		rm -f archlinux-bootstrap-x86_64.tar.zst sha256sums.txt
+		exit 1
 	fi
-	echo "Download failed, trying again with different mirror"
-done
-
-if [ -z "${bootstrap_is_good}" ]; then
-	echo "Bootstrap download failed or its checksum is incorrect"
-	exit 1
 fi
 
 # Unmount first just in case
 unmount_chroot
 
 rm -rf "${bootstrap}"
-tar xf archlinux-bootstrap-x86_64.tar.zst
-rm archlinux-bootstrap-x86_64.tar.zst sha256sums.txt
+zstd -dc archlinux-bootstrap-x86_64.tar.zst | tar -xf -
 
 mount_chroot
 
@@ -153,8 +166,23 @@ fi
 rm "${bootstrap}"/etc/locale.gen
 mv locale.gen "${bootstrap}"/etc/locale.gen
 
-rm "${bootstrap}"/etc/pacman.d/mirrorlist
-mv mirrorlist "${bootstrap}"/etc/pacman.d/mirrorlist
+if [ ! -f mirrorlist ]; then
+	generate_mirrorlist
+	reflector_used=0
+fi
+
+if [ -f mirrorlist ]; then
+	rm "${bootstrap}"/etc/pacman.d/mirrorlist
+	mv mirrorlist "${bootstrap}"/etc/pacman.d/mirrorlist
+fi
+
+#if [ -n "${DOWNLOAD_PROXY}" ]; then
+#	sed "s,#XferCommand = /usr/bin/curl -L -C - -f -o %o %u,XferCommand = /usr/bin/curl ${proxy[0]} ${proxy[1]} -L -C - -f -o %o %u," "${bootstrap}"/etc/pacman.conf > _
+#	mv -f _ "${bootstrap}"/etc/pacman.conf
+#fi
+
+sed 's/#DisableSandboxSyscalls/#DisableSandboxSyscalls\nDisableSandbox/' "${bootstrap}"/etc/pacman.conf > _
+mv -f _ "${bootstrap}"/etc/pacman.conf
 
 {
 	echo
@@ -166,7 +194,15 @@ run_in_chroot pacman-key --init
 run_in_chroot pacman-key --populate archlinux
 
 # Add Chaotic-AUR repo
-run_in_chroot pacman-key --recv-key 3056513887B78AEB --keyserver keyserver.ubuntu.com
+if ! run_in_chroot pacman-key --recv-key 3056513887B78AEB --keyserver keyserver.ubuntu.com; then
+	chaotic_keyring_extract_dir="${bootstrap}/tmp/chaotic-keyring"
+	mkdir -p "${chaotic_keyring_extract_dir}"
+	curl -L --retry 3 -o "${chaotic_keyring_extract_dir}/chaotic-keyring.pkg.tar.zst" "https://cdn-mirror.chaotic.cx/chaotic-aur/chaotic-keyring.pkg.tar.zst"
+	tar -xf "${chaotic_keyring_extract_dir}/chaotic-keyring.pkg.tar.zst" -C "${chaotic_keyring_extract_dir}"
+	run_in_chroot pacman-key --add /tmp/chaotic-keyring/usr/share/pacman/keyrings/chaotic.gpg
+	rm -rf "${chaotic_keyring_extract_dir}"
+fi
+
 run_in_chroot pacman-key --lsign-key 3056513887B78AEB
 
 if ! run_in_chroot pacman --noconfirm -U \
@@ -184,16 +220,20 @@ fi
 } >> "${bootstrap}"/etc/pacman.conf
 
 # Do not install unneeded files (man pages and Nvidia firmwares)
-sed -i 's/#NoExtract   =/NoExtract   = usr\/lib\/firmware\/nvidia\/\* usr\/share\/man\/\*/' "${bootstrap}"/etc/pacman.conf
+sed 's/#NoExtract   =/NoExtract   = usr\/lib\/firmware\/nvidia\/\* usr\/share\/man\/\*/' "${bootstrap}"/etc/pacman.conf > _
+mv -f _ "${bootstrap}"/etc/pacman.conf
 
 run_in_chroot pacman -Sy archlinux-keyring --noconfirm
 run_in_chroot pacman -Su --noconfirm
 
 if [ -n "$ENABLE_ALHP_REPO" ]; then
 	run_in_chroot pacman --noconfirm --needed -S alhp-keyring alhp-mirrorlist
-	sed -i "s/#\[multilib\]/#/" "${bootstrap}"/etc/pacman.conf
-	sed -i "s/\[core\]/\[core-x86-64-v${ALHP_FEATURE_LEVEL}\]\nInclude = \/etc\/pacman.d\/alhp-mirrorlist\n\n\[extra-x86-64-v${ALHP_FEATURE_LEVEL}\]\nInclude = \/etc\/pacman.d\/alhp-mirrorlist\n\n\[core\]/" "${bootstrap}"/etc/pacman.conf
-	sed -i "s/\[multilib\]/\[multilib-x86-64-v${ALHP_FEATURE_LEVEL}\]\nInclude = \/etc\/pacman.d\/alhp-mirrorlist\n\n\[multilib\]/" "${bootstrap}"/etc/pacman.conf
+	sed "s/#\[multilib\]/#/" "${bootstrap}"/etc/pacman.conf > _
+	mv -f _ "${bootstrap}"/etc/pacman.conf
+	sed "s/\[core\]/\[core-x86-64-v${ALHP_FEATURE_LEVEL}\]\nInclude = \/etc\/pacman.d\/alhp-mirrorlist\n\n\[extra-x86-64-v${ALHP_FEATURE_LEVEL}\]\nInclude = \/etc\/pacman.d\/alhp-mirrorlist\n\n\[core\]/" "${bootstrap}"/etc/pacman.conf > _
+	mv -f _ "${bootstrap}"/etc/pacman.conf
+	sed "s/\[multilib\]/\[multilib-x86-64-v${ALHP_FEATURE_LEVEL}\]\nInclude = \/etc\/pacman.d\/alhp-mirrorlist\n\n\[multilib\]/" "${bootstrap}"/etc/pacman.conf > _
+	mv -f _ "${bootstrap}"/etc/pacman.conf
 	run_in_chroot pacman -Syu --noconfirm
 fi
 
@@ -216,7 +256,7 @@ if ! run_in_chroot bash -c install_packages; then
 fi
 
 if [ "${#AUR_PACKAGES[@]}" -ne 0 ]; then
-	run_in_chroot pacman --noconfirm --needed -S base-devel yay
+	run_in_chroot pacman --noconfirm --needed -S base-devel paru
 	run_in_chroot useradd -m -G wheel aur
 	echo "%wheel ALL=(ALL:ALL) NOPASSWD: ALL" >> "${bootstrap}"/etc/sudoers
 
@@ -241,6 +281,10 @@ run_in_chroot pacman -Q > "${bootstrap}"/pkglist.x86_64.txt
 # Generate a list of licenses of installed packages
 export -f generate_pkg_licenses_file
 run_in_chroot bash -c generate_pkg_licenses_file
+
+sed 's/DownloadUser = alpm/#DownloadUser = alpm/' "${bootstrap}"/etc/pacman.conf > _
+mv -f _ "${bootstrap}"/etc/pacman.conf
+
 
 unmount_chroot
 

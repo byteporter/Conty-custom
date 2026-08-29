@@ -24,7 +24,7 @@ if (( EUID == 0 )) && [ -z "$ALLOW_ROOT" ]; then
 fi
 
 # Conty version
-script_version="1.28"
+script_version="1.29"
 
 # Important variables to manually adjust after modification!
 # Needed to avoid problems with mounting due to an incorrect offset.
@@ -203,6 +203,9 @@ Environment variables:
 
   XEPHYR_SIZE       Sets the size of the Xephyr window. The default is
                     800x600.
+
+  XEPHYR_ARGS       Adds arguments specified in this environment
+                    variable to the Xephyr launch command.
 
   CUSTOM_MNT        Sets a custom mount point for the Conty. This allows
                     Conty to be used with already mounted filesystems.
@@ -651,8 +654,11 @@ run_bwrap () {
 						 --tmpfs /var \
 						 --tmpfs /run \
 						 --symlink /run /var/run \
-						 --tmpfs /tmp \
-						 --new-session)
+						 --tmpfs /tmp)
+
+		if [ "$(cat /proc/sys/dev/tty/legacy_tiocsti 2>/dev/null)" != 0 ]; then
+			sandbox_params+=(--new-session)
+		fi
 
 		if [ -n "${non_standard_home[*]}" ]; then
 			sandbox_params+=(--dir "${NEW_HOME}")
@@ -814,12 +820,12 @@ exit_function () {
 	if [ ! "$(ls "${working_dir}"/running_* 2>/dev/null)" ]; then
 		if [ -d "${overlayfs_dir}"/merged ]; then
 			fusermount"${fuse_version}" -uz "${overlayfs_dir}"/merged 2>/dev/null || \
-			umount --lazy "${overlayfs_dir}"/merged 2>/dev/null
+			umount -l "${overlayfs_dir}"/merged 2>/dev/null
 		fi
 
 		if [ -z "${CUSTOM_MNT}" ]; then
 			fusermount"${fuse_version}" -uz "${mount_point}" 2>/dev/null || \
-			umount --lazy "${mount_point}" 2>/dev/null
+			umount -l "${mount_point}" 2>/dev/null
 		fi
 
 		if [ ! "$(ls "${mount_point}" 2>/dev/null)" ] || [ -n "${CUSTOM_MNT}" ]; then
@@ -1107,7 +1113,7 @@ if [ "$(ls "${mount_point}" 2>/dev/null)" ] || launch_wrapper "${mount_command[@
 
 				if [ -n "${NVIDIA_SHARED}" ]; then
 					fusermount"${fuse_version}" -uz "${overlayfs_dir}"/merged 2>/dev/null || \
-					umount --lazy "${overlayfs_dir}"/merged 2>/dev/null
+					umount -l "${overlayfs_dir}"/merged 2>/dev/null
 
 					rm -f "${overlayfs_shared_dir}"/up/etc/ld.so.cache
 
@@ -1159,7 +1165,7 @@ if [ "$(ls "${mount_point}" 2>/dev/null)" ] || launch_wrapper "${mount_command[@
 
 			QUIET_MODE=1 DISABLE_NET=1 SANDBOX_LEVEL=2 run_bwrap \
 			--bind-try /tmp/.X11-unix /tmp/.X11-unix \
-			Xephyr -noreset -ac -br -screen "${XEPHYR_SIZE}" :"${xephyr_display}" &>/dev/null & sleep 1
+			Xephyr -noreset -ac -br ${XEPHYR_ARGS} -screen "${XEPHYR_SIZE}" :"${xephyr_display}" &>/dev/null & sleep 1
 			xephyr_pid=$!
 
 			QUIET_MODE=1 run_bwrap openbox & sleep 1
@@ -1169,6 +1175,14 @@ if [ "$(ls "${mount_point}" 2>/dev/null)" ] || launch_wrapper "${mount_command[@
 
 			exit 1
 		fi
+	fi
+
+	# Disable lsfg-vk by default
+
+	if [ -z "${ENABLE_LSFG}" ] || [ "${ENABLE_LSFG}" = 0 ]; then
+		export DISABLE_LSFGVK=1
+	else
+		unset DISABLE_LSFGVK
 	fi
 
 	if [ -n "${script_is_symlink}" ] && [ -f "${mount_point}"/usr/bin/"${script_name}" ]; then
